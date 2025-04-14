@@ -9,26 +9,25 @@ from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 from config import LINKEDIN_EMAIL, LINKEDIN_PASSWORD
 
-driver = webdriver.Chrome()
-print("Logging in...")
-actions.login(driver, LINKEDIN_EMAIL, LINKEDIN_PASSWORD)
 
-def scrape_posts(company_url):
+def prep_page_for_posts():
 
     # TODO Get the date of the most recently scraped post
     
     print("Scraping posts")
-    driver.get(company_url)
 
-    # Toggle the Recent posts view
-    # driver.find_element(By.CSS_SELECTOR, 'button.sort-dropdown-trigger').click()
-    # driver.find_element(By.CSS_SELECTOR, 'button.sort-dropdown-trigger div.artdeco-dropdown__content-inner:nth-child(2)').click()
+    print("Sorting posts by Most Recent")
+    # Toggle the Recent posts view, rather than the default "Top posts" view
+    driver.find_element(By.CSS_SELECTOR, 'button#sort-dropdown-trigger').click()
+    time.sleep(1)
+    driver.find_element(By.CSS_SELECTOR, 'div.artdeco-dropdown__content-inner li:nth-child(2) button').click()
 
     print("Scrolling to some preset point to force the infinite scroll")
     # Scroll to some preset point to force the infinite scroll
     SCROLL_PAUSE_TIME = 3
+    SCROLL_COUNT = 2
     last_height = driver.execute_script("return document.body.scrollHeight")
-    for i in range(2):
+    for i in range(SCROLL_COUNT):
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(SCROLL_PAUSE_TIME)
         new_height = driver.execute_script("return document.body.scrollHeight")
@@ -41,8 +40,12 @@ def scrape_posts(company_url):
     driver.find_element(By.CSS_SELECTOR, 'body').send_keys(Keys.CONTROL + Keys.HOME)
     connect_buttons = driver.find_elements(By.CSS_SELECTOR, '.feed-shared-inline-show-more-text__see-more-less-toggle')
     for connect_button in connect_buttons:
+        time.sleep(1)
         connect_button.click()
 
+    print("Page prepped for scraping!")
+
+def scrape_posts_data():
     # redefine page source to reflect the latest DOM (after scrolling)
     src = driver.page_source
     soup = BeautifulSoup(src, 'lxml')
@@ -107,6 +110,23 @@ def scrape_posts(company_url):
 
     return posts_data
 
+def write_posts_data_to_csv(posts_data):
+    # CSV file path
+    csv_file_path = 'output.csv'
+
+    # both posts_data and csv are sorted by post_date (newest to oldest)
+    # TODO: check if posts is post_data is newer AND has a different post_text than the last post in the csv
+    # TODO: if it is, add the new post to the csv
+    # TODO: if it is not, do not add the post to the csv
+    # write the posts data to the csv file
+    with open(csv_file_path, 'w', newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        # csv_data = pd.read_csv(csv_file_path)
+        for index, row in posts_data.iterrows():
+            # if posts_data.iloc[index]['post_date'] > csv_data.iloc[index]['post_date'] and posts_data.iloc[index]['post_text'] != csv_data.iloc[index]['post_text'] and posts_data.iloc[index]['post_text'] != "":
+                # add the new post to the csv
+            csv_writer.writerow([row['post_date'], row['post_text']])
+                
 # TODO NEXT:
 # TODO: parse the post date and convert it to a datetime object
 # TODO: log all data to csv
@@ -120,21 +140,14 @@ SLUGS = [
 
 URLS = [f"https://www.linkedin.com/company/{slug}/posts/?feedView=all" for slug in SLUGS]
 
+driver = webdriver.Chrome()
+print("Logging in...")
+actions.login(driver, LINKEDIN_EMAIL, LINKEDIN_PASSWORD)
+
 for url in URLS:
-    posts_data = scrape_posts(url)
-
-
-# CSV file path
-csv_file_path = 'output.csv'
-
-# write the posts data to the csv file
-with open(csv_file_path, 'w', newline='') as csvfile:
-    csv_writer = csv.writer(csvfile)
-    for index, row in posts_data.iterrows():
-        csv_writer.writerow([row['post_date'], row['post_text']])
-
-
-
-
+    driver.get(url)
+    prep_page_for_posts()
+    posts_data = scrape_posts_data()
+    write_posts_data_to_csv(posts_data)
 
 driver.quit()
